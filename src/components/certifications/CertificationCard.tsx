@@ -5,15 +5,23 @@ import { CertificationModal } from './CertificationModal';
 
 interface CertificationCardProps {
   certification: Certification;
+  onDelete: (id: string) => Promise<void>;
 }
 
-export function CertificationCard({ certification }: CertificationCardProps) {
+export function CertificationCard({ certification, onDelete }: CertificationCardProps) {
   const [showModal, setShowModal] = useState(false);
   const expiryDate = new Date(certification.expiryDate);
   const today = new Date();
   const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   const isExpiringSoon = daysUntilExpiry <= 30;
   const isExpired = daysUntilExpiry <= 0;
+
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this certification?')) {
+      await onDelete(certification.id);
+      setShowModal(false);
+    }
+  };
 
   return (
     <>
@@ -63,6 +71,7 @@ export function CertificationCard({ certification }: CertificationCardProps) {
         <CertificationModal
           certification={certification}
           onClose={() => setShowModal(false)}
+          onDelete={handleDelete}
         />
       )}
     </>

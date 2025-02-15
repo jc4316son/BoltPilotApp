@@ -21,6 +21,7 @@ export function CertificationsPage() {
       const { data, error } = await supabase
         .from('certifications')
         .select('*')
+        .eq('pilot_id', user?.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -39,7 +40,23 @@ export function CertificationsPage() {
         imageUrl: cert.image_url
       }));
 
-      setCertifications(mappedCertifications);
+      // Get public URLs for all images
+      const certificationsWithUrls = await Promise.all(
+        mappedCertifications.map(async (cert) => {
+          if (cert.imageUrl) {
+            const { data } = supabase.storage
+              .from('certificates')
+              .getPublicUrl(cert.imageUrl);
+            return {
+              ...cert,
+              imageUrl: data.publicUrl
+            };
+          }
+          return cert;
+        })
+      );
+
+      setCertifications(certificationsWithUrls);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -54,17 +71,17 @@ export function CertificationsPage() {
     }
 
     try {
-      // Map our TypeScript interface to database columns
+      // Insert certification with image_url (which is now the storage path)
       const { data, error } = await supabase
         .from('certifications')
         .insert([
           {
             type: certification.type,
             number: certification.number,
-            issue_date: certification.issueDate,
-            expiry_date: certification.expiryDate,
+            issue_date: new Date(certification.issueDate).toISOString().split('T')[0],
+            expiry_date: new Date(certification.expiryDate).toISOString().split('T')[0],
             pilot_id: user.id,
-            image_url: certification.imageUrl
+            image_url: certification.imageUrl || null
           }
         ])
         .select()
@@ -72,10 +89,19 @@ export function CertificationsPage() {
 
       if (error) {
         console.error('Error saving certification:', error);
-        return;
+        throw error;
       }
 
       if (data) {
+        // Get the public URL for display if we have an image
+        let publicUrl = null;
+        if (data.image_url) {
+          const { data: urlData } = supabase.storage
+            .from('certificates')
+            .getPublicUrl(data.image_url);
+          publicUrl = urlData.publicUrl;
+        }
+
         // Map the response back to our TypeScript interface
         const newCertification: Certification = {
           id: data.id,
@@ -84,12 +110,37 @@ export function CertificationsPage() {
           issueDate: data.issue_date,
           expiryDate: data.expiry_date,
           pilotId: data.pilot_id,
-          imageUrl: data.image_url
+          imageUrl: publicUrl
         };
         setCertifications((prev) => [newCertification, ...prev]);
       }
     } catch (error) {
       console.error('Error:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteCertification = async (id: string) => {
+    if (!user) {
+      alert('Please sign in to delete certifications');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('certifications')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting certification:', error);
+        throw error;
+      }
+
+      setCertifications((prev) => prev.filter(cert => cert.id !== id));
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
     }
   };
 
@@ -124,8 +175,8 @@ export function CertificationsPage() {
       <CertificationForm onSubmit={handleNewCertification} />
 
       {loading ? (
-        <div className="text-center py-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -133,6 +184,7 @@ export function CertificationsPage() {
             <CertificationCard
               key={certification.id}
               certification={certification}
+              onDelete={handleDeleteCertification}
             />
           ))}
         </div>

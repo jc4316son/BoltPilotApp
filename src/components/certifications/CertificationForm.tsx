@@ -47,10 +47,7 @@ export function CertificationForm({ onSubmit }: CertificationFormProps) {
         }
 
         if (data) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('certificates')
-            .getPublicUrl(fileName);
-          imageUrl = publicUrl;
+          imageUrl = fileName;
         }
       } catch (error) {
         console.error('Error uploading image:', error);
